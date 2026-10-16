@@ -1,0 +1,132 @@
+# arabic-channel-sim conditions file, version conditions_v1
+# Released under CC0 1.0 (https://creativecommons.org/publicdomain/zero/1.0/) by Bayanat Labs.
+#
+# Every rendered variant is a deterministic function of (clean 16 kHz mono parent, condition, parent id).
+# Condition ids are permanent: a changed recipe gets a new id, never a reused one.
+# The renderer (arabic_channel_sim.render) executes the "steps" below in order; nothing else is applied
+# except the alignment, level matching and 16-bit quantisation described under "common".
+
+version: conditions_v1
+sample_rate_hz: 16000
+
+output:
+  container: FLAC
+  subtype: PCM_16          # signed 16-bit; round to nearest, clip to [-32768, 32767], no dither
+  channels: 1
+  sample_rate_hz: 16000
+
+common:
+  parent_quantisation: >-
+    The clean parent is read as float, quantised to 16-bit (round to nearest, clip, no dither) and that
+    16-bit signal is both the CLEAN release and the input of every condition.
+  resampler:
+    function: scipy.signal.resample_poly
+    window: [kaiser, 5.0]
+    note: polyphase FIR with the up/down factors of the two rates; zero delay by construction
+  bandpass_fir:
+    design: scipy.signal.firwin (pass_zero=False)
+    phase: linear, applied centred (zero delay)
+  ffmpeg:
+    input: raw signed 16-bit little-endian PCM on stdin
+    output: raw signed 16-bit little-endian PCM on stdout
+  alignment:
+    method: cross-correlation with the parent; the variant is shifted by the lag of the maximum
+    search_ms: 100
+    applies_to: every condition except reverberation, which is aligned on the direct path of the impulse response
+    length: the variant is trimmed or zero-padded to exactly the parent length
+  level_match:
+    method: active-speech RMS of the variant set equal to the parent's
+    frame_ms: 20
+    active_within_db: 30   # active frames: parent frames whose energy is within 30 dB of its loudest frame
+    tolerance_db: 0.5
+    max_clipped_fraction: 0.001
+    clip_guard: >-
+      If the level-matched variant would put more than max_clipped_fraction of its samples at 16-bit full
+      scale (possible when the parent itself is clipped), its gain is lowered just enough to stay within
+      that share; such variants are marked level_capped and may sit more than tolerance_db below the parent.
+  seed: int(sha256(parent_id + condition_id).hexdigest()[:8], 16)
+  integrity_checks:
+    - decodes, no NaN or Inf
+    - clipped samples (at 16-bit full scale) <= 0.1 %
+    - active-speech level within tolerance_db of the parent, unless level_capped
+    - length equals the parent length in samples
+    - 95 % spectral roll-off below the condition's rolloff95_max_hz (where given)
+    - reverberation conditions: measured RT60 of the impulse response within rt60_tolerance of the target
+
+conditions:
+  - id: BL1
+    name: telephone_bandlimit
+    family: bandlimit
+    description: Telephone band, 300-3,400 Hz, at an 8 kHz sample rate, returned to 16 kHz.
+    steps:
+      - {op: resample, to_hz: 8000}
+      - {op: bandpass, low_hz: 300, high_hz: 3400, numtaps: 511, window: [kaiser, 8.0]}
+      - {op: resample, to_hz: 16000}
+    checks: {rolloff95_max_hz: 3600}
+
+  - id: RS2
+    name: resample_4khz
+    family: resample
+    description: Down-sampled to 4 kHz and up-sampled back to 16 kHz (content above 2 kHz removed).
+    steps:
+      - {op: resample, to_hz: 4000}
+      - {op: resample, to_hz: 16000}
+    checks: {rolloff95_max_hz: 2100}
+
+  - id: CD1
+    name: g711_mulaw
+    family: codec
+    description: >-
+      G.711 mu-law at 8 kHz (64 kbit/s) after the BL1 telephone band-limit, returned to 16 kHz.
+    steps:
+      - {op: resample, to_hz: 8000}
+      - {op: bandpass, low_hz: 300, high_hz: 3400, numtaps: 511, window: [kaiser, 8.0]}
+      - op: ffmpeg_codec
+        sample_rate_hz: 8000
+        encode: [-c:a, pcm_mulaw, -f, mulaw]
+        decode_input: [-f, mulaw, -ar, '8000', -ac, '1']
+      - {op: resample, to_hz: 16000}
+    checks: {rolloff95_max_hz: 3600}
+
+  - id: CD6
+    name: opus_12kbps_voip
+    family: codec
+    description: >-
+      Opus (libopus) at 12 kbit/s, VoIP mode, 20 ms frames, 16 kHz input, decoded with libopus to 16 kHz.
+    steps:
+      - op: ffmpeg_codec
+        sample_rate_hz: 16000
+        encode: [-c:a, libopus, -b:a, 12k, -vbr, 'on', -application, voip, -frame_duration, '20',
+                 -compression_level, '10', -f, ogg]
+        decode_input: [-c:a, libopus, -f, ogg]
+    checks: {rolloff95_max_hz: 8100}
+
+  - id: RV2
+    name: reverb_rt60_0.6s
+    family: reverb
+    description: >-
+      Convolution with a synthetic shoebox-room impulse response (target RT60 0.6 s) from rirs_v1, chosen
+      per parent by seed modulo the number of rooms; aligned on the direct path and cut to the parent length.
+    steps:
+      - {op: reverb, rir_target_s: 0.6}
+    checks: {rt60_target_s: 0.6, rt60_tolerance: 0.10}
+
+rirs:
+  set: rirs_v1
+  licence: CC0-1.0
+  generator: pyroomacoustics image-source method (ShoeBox), no air absorption, no ray tracing
+  sample_rate_hz: 16000
+  rt60_targets_s: [0.3, 0.6, 1.0]
+  rooms_per_target: 20
+  room_dims_m: {min: [3.0, 3.0, 2.5], max: [10.0, 8.0, 4.0]}
+  wall_margin_m: 0.5
+  height_m: [1.0, 2.0]
+  source_mic_distance_m: [1.0, 3.0]
+  max_order_cap: 1000
+  calibration_steps: 8
+  calibration_tolerance: 0.05
+  rt60_tolerance: 0.10
+  rt60_measure: Schroeder backward integration, line fit from -5 dB to -35 dB, extrapolated to -60 dB (T30)
+  seed_base: 1000
+  seed: seed_base * target_index + candidate_index (candidates tried in order; rooms outside rt60_tolerance are skipped)
+  max_candidates_per_target: 200

@@ -1,0 +1,60 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "arabic-channel-sim"
+dynamic = ["version"]
+description = "Render clean speech under fixed, documented channel conditions (telephone band-limit, resampling, G.711, Opus, synthetic room reverberation), by Bayanat Labs."
+readme = "README.md"
+requires-python = ">=3.9"
+license = "Apache-2.0 AND CC0-1.0 AND CC-BY-4.0"
+license-files = ["LICENSE", "LICENSE-CC0", "LICENSE-docs", "NOTICE"]
+authors = [{ name = "Bayanat Labs" }]
+dependencies = [
+  "numpy>=1.22",
+  "scipy>=1.8",
+  "soundfile>=0.12",
+  "pyyaml>=6.0",
+]
+keywords = ["arabic", "speech", "asr", "robustness", "telephony", "codec", "g711", "opus", "reverberation",
+            "room-impulse-response", "data-augmentation", "fleurs"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Science/Research",
+  "Intended Audience :: Developers",
+  "Natural Language :: Arabic",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Topic :: Multimedia :: Sound/Audio :: Speech",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+[project.optional-dependencies]
+metrics = ["pystoi>=0.4"]
+rir = ["pyroomacoustics>=0.7"]
+test = ["pytest>=7", "pystoi>=0.4"]
+
+[project.urls]
+Homepage = "https://github.com/Bayanat-Labs/arabic-channel-sim"
+Repository = "https://github.com/Bayanat-Labs/arabic-channel-sim"
+Issues = "https://github.com/Bayanat-Labs/arabic-channel-sim/issues"
+Dataset = "https://huggingface.co/datasets/Bayanat-Labs/arabic-asr-channel-pairs"
+
+[project.scripts]
+arabic-channel-sim = "arabic_channel_sim.cli:main"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+packages = ["arabic_channel_sim"]
+
+[tool.setuptools.package-data]
+arabic_channel_sim = ["data/conditions_v1.yaml", "data/rirs_v1/params.jsonl", "data/rirs_v1/*/*.wav"]
+
+[tool.setuptools.dynamic]
+version = { attr = "arabic_channel_sim._version.__version__" }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-p no:cacheprovider"

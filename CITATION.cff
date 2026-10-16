@@ -1,0 +1,18 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "arabic-channel-sim: channel-condition renderer for Arabic speech robustness tests"
+version: 0.1.0
+date-released: 2026-10-15
+license: Apache-2.0
+authors:
+  - name: "Bayanat Labs"
+    website: "https://bayanatlabs.com"
+repository-code: "https://github.com/Bayanat-Labs/arabic-channel-sim"
+url: "https://huggingface.co/datasets/Bayanat-Labs/arabic-asr-channel-pairs"
+keywords:
+  - arabic
+  - speech recognition
+  - robustness
+  - telephony
+  - codec
+  - reverberation
